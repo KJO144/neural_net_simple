@@ -1,5 +1,7 @@
+import tensorflow as tf
+
+
 def loss_and_grads_from_tf(X, Y, params, layer_dims, activation_functions):
-    import tensorflow as tf
 
     n_x, m = X.shape
     n_y = Y.shape[0]
@@ -15,23 +17,22 @@ def loss_and_grads_from_tf(X, Y, params, layer_dims, activation_functions):
 
     num_layers = len(layer_dims)
 
+    # define dict of activation functions
+    avs = {'relu': tf.nn.relu}
+
     a_prev = x_ph
     for i in range(1, num_layers+1):
         w = tensor_params['W'+str(i)]
         b = tensor_params['b'+str(i)]
         z = tf.matmul(w, a_prev) + b
-        activation_function = activation_functions[i-1]
-        if activation_function == 'relu':
-            a = tf.nn.relu(z)
-        elif activation_function == 'sigmoid':
-            a = tf.nn.sigmoid(z)
+        if i is num_layers:  # because tf.nn.sigmoid_cross_entropy_with_logits takes logits
+            a = tf.identity(z)
         else:
-            raise ValueError('unknown activation function')
+            a = avs[activation_functions[i-1]](z)
         a_prev = a
 
     # cross-entropy loss
-    assert m is 1, "only support m=1 for now"    
-    loss = - tf.matmul(y_ph, tf.math.log(a)) - tf.matmul(1-y_ph, tf.math.log(1-a))
+    loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=tf.transpose(a), labels=tf.transpose(y_ph)))
 
     # track gradients too
     param_names = params.keys()
@@ -39,9 +40,11 @@ def loss_and_grads_from_tf(X, Y, params, layer_dims, activation_functions):
     grads_list = tf.gradients(loss, tensors)
     grads_dict = dict(zip(param_names, grads_list))
 
-    # run it
+    return loss, grads_dict, x_ph, y_ph
+
+
+def calculate_loss_and_grads_tf(x, y, x_ph, y_ph, loss_tensor, grads_tensors):
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        loss_value, grads = sess.run([loss, grads_dict], feed_dict={x_ph: X, y_ph: Y})
-
+        loss_value, grads = sess.run([loss_tensor, grads_tensors], feed_dict={x_ph: x, y_ph: y})
     return loss_value, grads
