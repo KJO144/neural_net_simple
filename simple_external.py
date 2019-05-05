@@ -1,4 +1,5 @@
 import tensorflow as tf
+import torch
 
 
 def loss_and_grads_from_tf(X, Y, params, layer_dims, activation_functions):
@@ -48,3 +49,43 @@ def calculate_loss_and_grads_tf(x, y, x_ph, y_ph, loss_tensor, grads_tensors):
         sess.run(tf.global_variables_initializer())
         loss_value, grads = sess.run([loss_tensor, grads_tensors], feed_dict={x_ph: x, y_ph: y})
     return loss_value, grads
+
+def forward(x_tensor, tensor_params, activation_functions):
+    num_layers = int(len(tensor_params) / 2)
+    a_prev = x_tensor
+    avs = {'relu': torch.nn.functional.relu, 'sigmoid': torch.sigmoid }
+    for i in range(1, num_layers + 1):
+        w = tensor_params['W'+str(i)]
+        b = tensor_params['b'+str(i)]
+        z = torch.mm(w, a_prev) + b
+        a = avs[activation_functions[i-1]](z)
+        a_prev = a
+    return a
+
+
+def calculate_loss_and_grads_pytorch(x, y, params, activation_functions, num_epochs, learning_rate):
+    # inputs and outputs
+    X_tensor = torch.from_numpy(x)
+    Y_tensor = torch.from_numpy(y)
+
+    dtype = torch.double
+    tensor_params = {name: torch.tensor(value, dtype=dtype, requires_grad=True) for name, value in params.items()}
+
+    optimizer = torch.optim.SGD(tensor_params.values(), lr=learning_rate)
+    loss_func = torch.nn.BCELoss()
+
+    for i in range(num_epochs):
+        # forward pass
+        yhat = forward(X_tensor, tensor_params, activation_functions)
+
+        # calculate loss
+        loss = loss_func(yhat.t(), Y_tensor.t())
+
+        optimizer.zero_grad()
+        loss.backward()
+
+        if False and i % 100 is 0:
+            print(i, loss.item())
+        optimizer.step()
+    loss = loss.item()
+    return loss, tensor_params
